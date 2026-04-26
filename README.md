@@ -310,6 +310,47 @@ Response:
 }
 ```
 
+---
+
+## Known limitations / TODO
+
+### Canonical IDs for reliable restore
+
+Salesforce assigns a new `Id` when a record is deleted and recreated (hard delete + insert). The current restore flow upserts on the original `Id`, which means:
+- If the record was hard-deleted in Salesforce, the upsert creates a new record with the old `Id` — this works, but the new record gets a fresh Salesforce `Id` on the next sync, breaking the link to history.
+- Downstream systems that stored the old `Id` as a foreign key are now pointing at a ghost.
+
+The fix is to introduce a stable **canonical ID** (e.g. a UUID written to a custom field like `Lazarus_ID__c`) at first-sync time and use that as the upsert key instead of `Id`. The canonical ID survives hard delete + recreate because it lives in the record data, not Salesforce's internal ID.
+
+Work needed:
+- Add `Lazarus_ID__c` custom field to managed objects in Salesforce
+- Backfill populates it on first write if absent
+- `BulkUpsert` uses `externalIdFieldName: "Lazarus_ID__c"` instead of `"Id"`
+- Restore queries by `lazarus_id__c` rather than `id`
+
+### Restore should handle related records (accounts + contacts)
+
+Restoring an Account without its related Contacts (and Opportunities, Cases, etc.) leaves Salesforce in a partially consistent state — contacts point to a parent that may not match the restored snapshot, or the parent doesn't exist yet when contacts are pushed.
+
+**Depends on canonical IDs being implemented first** — without a stable external ID on each object, Salesforce has nothing to resolve parent lookups against.
+
+**Dependency graph** is derived automatically from Salesforce's `Describe` response. Every `reference` field includes a `referenceTo` array (e.g. `Contact.AccountId` → `["Account"]`). No manual config needed — the graph updates automatically when Salesforce schema changes.
+
+**Parent lookup rewrite** uses Salesforce's external ID relationship syntax in the Bulk API CSV rather than swapping in new SF IDs. For example, instead of `AccountId = "001yyy"` (new SF ID, unknown until after restore), the Contact CSV uses:
+
+```
+AccountId:Account:Lazarus_ID__c = "uuid-account-123"
+```
+
+Salesforce resolves the join server-side during upsert. The value comes from joining the Contact archive row against the Account archive row on `AccountId = Account.Id` and substituting `Account.Lazarus_ID__c`.
+
+Work needed:
+- Canonical IDs (see above) — prerequisite
+- Extend `salesforce.Field` to capture `ReferenceTo []string` from describe response
+- Build dependency graph from reference fields at restore time; topological sort to determine restore order
+- Rewrite child reference columns to `Field:Object:Lazarus_ID__c` format before constructing the upsert CSV
+- `POST /restore/execute` accepts an `include_related: true` flag to opt in to cascade restore
+
 ### Typical restore workflow
 
 ```
