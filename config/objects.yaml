@@ -1,0 +1,76 @@
+objects:
+  - name: Account
+    primary_key: Id
+    watermark_field: SystemModstamp
+    partition_by:
+      - field: SystemModstamp
+        transform: day
+      
+    overflow: false
+    removed_field_policy: tombstone
+    exclude_fields: []
+
+  - name: Contact
+    primary_key: Id
+    watermark_field: SystemModstamp
+    partition_by:
+      - field: SystemModstamp
+        transform: day
+    overflow: false
+    removed_field_policy: tombstone
+    exclude_fields:
+      - PhotoUrl
+      - IndividualId
+
+  - name: Opportunity
+    primary_key: Id
+    watermark_field: SystemModstamp
+    partition_by:
+      - field: SystemModstamp
+        transform: day
+      - field: StageName
+        transform: identity
+    overflow: false
+    removed_field_policy: tombstone
+    exclude_fields: []
+
+  - name: Lead
+    primary_key: Id
+    watermark_field: SystemModstamp
+    partition_by:
+      - field: SystemModstamp
+        transform: day
+    overflow: true
+    removed_field_policy: tombstone
+    exclude_fields:
+      - PhotoUrl
+
+  - name: Case
+    primary_key: Id
+    watermark_field: SystemModstamp
+    partition_by:
+      - field: SystemModstamp
+        transform: day
+    overflow: false
+    removed_field_policy: halt
+    exclude_fields: []
+
+  - name: Task
+    primary_key: Id
+    watermark_field: SystemModstamp
+    partition_by:
+      - field: SystemModstamp
+        transform: day
+    overflow: true
+    removed_field_policy: tombstone
+    exclude_fields: []
+
+  - name: Event
+    primary_key: Id
+    watermark_field: SystemModstamp
+    partition_by:
+      - field: SystemModstamp
+        transform: day
+    overflow: false
+    removed_field_policy: halt
+    exclude_fields: []
