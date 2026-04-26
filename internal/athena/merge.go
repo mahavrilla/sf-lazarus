@@ -34,9 +34,10 @@ USING (
   )
   SELECT %s FROM ranked WHERE rn = 1
 ) AS s ON t.id = s.id
-WHEN MATCHED THEN UPDATE SET
+WHEN MATCHED AND s.isdeleted = 'true'  THEN DELETE
+WHEN MATCHED AND s.isdeleted = 'false' THEN UPDATE SET
   %s
-WHEN NOT MATCHED THEN INSERT (%s) VALUES (%s)`,
+WHEN NOT MATCHED AND s.isdeleted = 'false' THEN INSERT (%s) VALUES (%s)`,
 		c.cfg.Database, currentTable,
 		c.cfg.Database, rawTable,
 		colList,

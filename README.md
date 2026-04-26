@@ -18,12 +18,7 @@ Because every sync cycle appends rather than overwrites, the full state history 
 ### Install
 
 ```bash
-# macOS
 brew install awscli
-
-# or download directly
-curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o /tmp/AWSCLIV2.pkg
-sudo installer -pkg /tmp/AWSCLIV2.pkg -target /
 ```
 
 ### Authenticate
@@ -61,8 +56,8 @@ aws s3 mb s3://your-bucket-name --region us-east-1
 # DynamoDB table for watermark state
 aws dynamodb create-table \
   --table-name lazarus-watermarks \
-  --attribute-definitions AttributeName=pk,AttributeType=S \
-  --key-schema AttributeName=pk,KeyType=HASH \
+  --attribute-definitions AttributeName=object,AttributeType=S \
+  --key-schema AttributeName=object,KeyType=HASH \
   --billing-mode PAY_PER_REQUEST
 
 # Glue database (namespace for Iceberg tables)
@@ -142,7 +137,9 @@ objects:
   - name: Account
     primary_key: Id
     watermark_field: SystemModstamp   # incremental cursor
-    partition_by: [SystemModstamp]
+    partition_by:
+      - field: SystemModstamp
+        transform: day                # day | hour | month | year | identity
     overflow: false                   # spill unmapped fields to _overflow JSON column
     removed_field_policy: halt        # halt | tombstone
     exclude_fields: []
@@ -186,6 +183,34 @@ SF_LOGIN_URL=https://login.salesforce.com
 SF_CLIENT_ID=...
 SF_CLIENT_SECRET=...
 ```
+
+---
+
+## Current-state merge (`cmd/merge`)
+
+The raw Iceberg tables are append-only — every sync adds rows. `cmd/merge` materialises a `_current` table for each object containing only the latest state of every live record. Run it nightly (EventBridge or cron) after backfill completes.
+
+```bash
+go run ./cmd/merge --object Account
+```
+
+Deleted records (where `IsDeleted = true`) are removed from the `_current` table automatically. After the first run, query current state without any `ROW_NUMBER()` gymnastics:
+
+```sql
+SELECT * FROM "lazarus_dev"."Account_current" WHERE id = '001WE00001CeWhkYAF'
+```
+
+### Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--object` | *(all)* | Merge a single named object |
+| `--glue-database` | `$GLUE_DATABASE` | Glue database for Iceberg tables |
+| `--s3-bucket` | `$S3_BUCKET` | S3 bucket for Iceberg data |
+| `--s3-prefix` | `$S3_KEY_PREFIX` | S3 key prefix for all tables |
+| `--athena-workgroup` | `$ATHENA_WORKGROUP` / `primary` | Athena workgroup |
+| `--athena-output` | `$ATHENA_OUTPUT_LOCATION` | S3 URI for Athena result output |
+| `--log-level` | `info` | `debug` \| `info` \| `warn` \| `error` |
 
 ---
 

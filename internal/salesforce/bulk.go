@@ -128,7 +128,7 @@ func buildSOQL(p BulkQueryParams) string {
 // createQueryJob submits a new Bulk API 2.0 query job and returns its ID.
 func (c *Client) createQueryJob(ctx context.Context, soql string) (bulkJob, error) {
 	body := map[string]string{
-		"operation":       "query",
+		"operation":       "queryAll",
 		"query":           soql,
 		"contentType":     "CSV",
 		"columnDelimiter": "COMMA",
